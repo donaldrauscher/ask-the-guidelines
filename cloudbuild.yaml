@@ -7,6 +7,7 @@ steps:
       - 'gcr.io/$PROJECT_ID/ask-the-guidelines:$COMMIT_SHA'
       - '--build-arg'
       - 'openai_api_key=$$OPENAI_API_KEY'
+    secretEnv: ['OPENAI_API_KEY']
   # Add latest tag
   - name: 'gcr.io/cloud-builders/docker'
     args: ['tag', 'gcr.io/$PROJECT_ID/ask-the-guidelines:$COMMIT_SHA', 'gcr.io/$PROJECT_ID/ask-the-guidelines:latest']
