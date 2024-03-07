@@ -18,7 +18,6 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
-      - 'beta'
       - 'run'
       - 'deploy'
       - 'ask-the-guidelines'
@@ -36,6 +35,7 @@ steps:
       - 'us-central1'
       - '--execution-environment'
       - 'gen2'
+      - '--allow-unauthenticated'
   # Route traffic to latest deployment
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
