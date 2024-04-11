@@ -1,13 +1,38 @@
 import re, os
+from typing import List
 
 import chromadb
 from langchain_openai import OpenAIEmbeddings
+
+from langchain_core.documents.base import Document
 
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders.llmsherpa import LLMSherpaFileLoader
 
 
 NLM_INGESTOR_URL = os.environ.get('NLM_INGESTOR_URL', "http://localhost:5010/api/parseDocument?renderFormat=all")
+
+
+# add chapter information to metadata
+def add_chapter_metadata(docs: List[Document]):
+
+    last_chapter = None
+    for doc in docs:
+        chapter_match = re.compile(r'^([0-9]+(?:\.[0-9]+)*) -').search(doc.metadata['section_title'])
+        if chapter_match:
+            chapter = chapter_match.group(1)
+            doc.metadata['chapter'] = chapter
+            last_chapter = chapter
+        else:
+            if last_chapter is not None:
+                doc.metadata['chapter'] = last_chapter
+
+
+# add chapter information to metadata
+def add_hcpcs_metadata(docs: List[Document]):
+    for doc in docs:
+        hcpcs = re.compile(r'[0-9A-Z][0-9]{4}').findall(doc.page_content)
+        doc.metadata['hcpcs_codes'] = ' '.join(list(set(hcpcs)))
 
 
 if __name__ == "__main__":
@@ -21,17 +46,9 @@ if __name__ == "__main__":
     )
     docs = loader.load()
 
-    # add chapter information to metadata
-    last_chapter = None
-    for doc in docs:
-        chapter_match = re.compile(r'^([0-9]+(?:\.[0-9]+)*) -').search(doc.metadata['section_title'])
-        if chapter_match:
-            chapter = chapter_match.group(1)
-            doc.metadata['chapter'] = chapter
-            last_chapter = chapter
-        else:
-            if last_chapter is not None:
-                doc.metadata['chapter'] = last_chapter
+    # add metadata
+    add_chapter_metadata(docs)
+    add_hcpcs_metadata(docs)
 
     # embed and load into chroma
     # each page = one document

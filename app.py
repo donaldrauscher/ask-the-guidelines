@@ -4,13 +4,19 @@ import chromadb
 import streamlit as st
 
 # from langchain import hub
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
 from langchain_community.vectorstores import Chroma
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+from retriever import DocumentationRetriever, make_hcpcs_codes_chain
+
+
+# from langchain.globals import set_debug
+# set_debug(True)
 
 
 def sort_docs_by_section_number(docs: List[Document]) -> List[Document]:
@@ -28,21 +34,32 @@ def get_vector_store():
     )
 
 
-def get_rag_chain(prompt_str: str, k: int = 5):
-    vector_store = get_vector_store()
-
-    retriever = vector_store.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": k}
-    )
-
+def get_rag_chain(prompt_str: str, score_threshold: float = 0.5):
     llm = ChatOpenAI(model_name="gpt-4-0125-preview", temperature=0)
 
+    vector_store = get_vector_store()
+
+    retriever = DocumentationRetriever(
+        vectorstore=vector_store, 
+        search_type="similarity_score_threshold", 
+        search_kwargs={"score_threshold": score_threshold}, 
+        hcpcs_codes_chain=make_hcpcs_codes_chain(llm)
+    )
+
     # prompt = hub.pull("rlm/rag-prompt")
-    prompt = ChatPromptTemplate.from_messages([("human", prompt_str)])
+    prompt = PromptTemplate(
+        input_variables=['context', 'question'],
+        template=prompt_str
+    )
 
     def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
+        def format_doc(doc):
+            return "Chapter {} Section {}:\n{}".format(
+                doc.metadata.get('chapter', 'None'),
+                doc.metadata['section_title'],
+                doc.page_content
+            )
+        return "\n\n".join(format_doc(doc) for doc in docs)
 
     rag_chain = (
         RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
@@ -80,9 +97,9 @@ prompt = st.text_area(
     value=(
         "You are a medical billing specialist who is helping healthcare providers answer questions related "
         "to claims billing. You will be provided excerpts from CMS' Medicare claims processing manual, which "
-        "you will use to answer the question. Only use information from the context provider.  If you cannot "
+        "you will use to answer the question. Only use information from the context provided below.  If you cannot "
         "determine the answer based on the context provided, just say that you don't know. "
-        "Answers should be detailed with a maximum length of 8 sentences. \n\n"
+        "Answers should be detailed and thorough.\n\n"
         "Question: {question} \n\n"
         "Context: {context} \n\n"
         "Answer:"
@@ -90,9 +107,14 @@ prompt = st.text_area(
     height=300
 ) 
 
-question = st.text_input(
+question = st.text_area(
     label='Question:',
-    value="When can the KX modifier be used?"
+    value=(
+        "What guidance does Medicare Claims Processing Manual provide on when and how a healthcare provider "
+        "can bill for HCPCS 97116? Please format response as a list of guidelines for a healthcare provider "
+        "to follow."
+    ),
+    height=150
 )
 
 if st.button("Ask", type="primary", disabled=not question):
